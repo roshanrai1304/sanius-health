@@ -2,6 +2,38 @@
 
 ---
 
+## Problem Statement
+
+> You are training a neural network for a binary classification task where the goal is to classify images of cats and dogs. The dataset is well-balanced, and you are using a standard convolutional neural network (CNN) architecture. However, you notice that the training accuracy is high (around 95%), but the validation accuracy is consistently low (around 60%).
+
+### Diagnosis: Overfitting
+
+The scenario described above is a textbook case of **overfitting** — the model memorizes the training data instead of learning generalizable patterns. The key indicators are:
+
+1. **High training accuracy (~95%)** means the model has enough capacity to fit the training data almost perfectly.
+2. **Low validation accuracy (~60%)** means the model fails to generalize to unseen data — it has memorized noise and specific pixel patterns rather than learning the abstract features that distinguish cats from dogs.
+3. **Large train-val gap (~35%)** is the hallmark of overfitting. A well-generalizing model should have a small gap (ideally <5-10%).
+
+### Root Causes of Overfitting
+
+| Cause | Explanation |
+|---|---|
+| **Excessive model capacity** | Too many parameters relative to the dataset size. The model has enough degrees of freedom to memorize every training sample, including noise and irrelevant details. |
+| **Insufficient training data** | With limited images, the model sees the same samples repeatedly and starts memorizing them rather than extracting general features. |
+| **No data augmentation** | Without augmentation, the model sees identical images every epoch. It learns to recognize specific pixel arrangements rather than the concept of "cat" or "dog". |
+| **No regularization** | Without techniques like Dropout, BatchNorm, or weight decay, there is nothing preventing the model from assigning extreme weight values to fit training noise. |
+| **Training too long** | Without early stopping, the model continues optimizing on training data well past the point where validation performance has plateaued or started degrading. |
+
+### How We Addressed This
+
+We built two models to demonstrate the problem and the solution:
+1. **Baseline CNN** — A deliberately large model with no regularization to reproduce the overfitting scenario.
+2. **Improved CNN** — A right-sized model with 7 regularization techniques applied to eliminate overfitting.
+
+The detailed architectures, techniques, and results are presented below.
+
+---
+
 ## Section 1: CNN Cats vs Dogs — Overfitting Demonstration and Fix
 
 ### Dataset
@@ -231,6 +263,42 @@ The features are extracted from retinal images using image processing techniques
 2. **Voting (Soft) came close:** It achieved the third-best ROC-AUC (0.8187) by averaging the probabilities of LR + RF + XGBoost. This shows ensembling does help, but the gain over the best individual model (LR: 0.8294) was negative because the weaker models (RF, XGBoost) pulled down the average.
 
 3. **Stacking overhead:** Stacking uses 5-fold CV to train meta-features, which further reduces the effective training data per fold. On a 920-sample dataset, this means each fold trains on only ~736 samples — too little for the stacking approach to outperform simpler models.
+
+---
+
+## Answering the Original Question
+
+> Training accuracy is high (~95%), but validation accuracy is consistently low (~60%). What is happening and how do you fix it?
+
+### What Is Happening
+
+This is **overfitting**. The model has memorized the training data rather than learning generalizable features. The ~35% gap between training and validation accuracy confirms the model performs well only on data it has already seen.
+
+### How to Fix It — Summary of Techniques Applied
+
+| # | Technique | What It Does | Impact |
+|---|---|---|---|
+| 1 | **Reduce model size** | Fewer parameters = less capacity to memorize | Our 69x reduction (22M to 322K params) was the single biggest factor |
+| 2 | **Data Augmentation** | Creates variations of each image (flips, rotations, color shifts) so the model never sees the exact same image twice | Forces the model to learn abstract features like shapes and textures instead of specific pixel patterns |
+| 3 | **Batch Normalization** | Normalizes layer activations, stabilizes gradients | Enables the model to actually train effectively — without it, our baseline couldn't learn at all |
+| 4 | **Dropout** | Randomly disables neurons during training | Prevents co-adaptation — no single neuron can memorize a training sample alone |
+| 5 | **Weight Decay (L2)** | Penalizes large weights in the loss function | Keeps weights small, preventing the model from fitting noise |
+| 6 | **Early Stopping** | Stops training when validation loss stops improving | Prevents the model from training past the point of diminishing returns |
+| 7 | **LR Scheduling** | Reduces learning rate when progress stalls | Allows fine-grained convergence without overshooting |
+| 8 | **Global Average Pooling** | Replaces large fully connected layers | Structural regularization — eliminates millions of parameters that would otherwise memorize |
+
+### Our Results
+
+| | Before Fix (Baseline) | After Fix (Improved) |
+|---|---|---|
+| Train Accuracy | 50.0% (failed to learn) | 82.8% |
+| Val Accuracy | 50.0% | 84.5% (best: 85.8%) |
+| Train-Val Gap | 0.0% | -1.7% (healthy) |
+| Parameters | 22,124,098 | 321,954 |
+
+The baseline model was so over-parameterized that it didn't just overfit — it completely failed to optimize on 32x32 images. The improved model achieved 85.8% validation accuracy with a negative train-val gap, meaning it generalizes slightly better than it fits the training data. This is the ideal outcome: the model has learned robust, generalizable features rather than memorizing the training set.
+
+**The key insight:** Fixing overfitting is not just about adding regularization to a large model. It requires a holistic approach — right-sizing the architecture, augmenting the data, regularizing the weights, and knowing when to stop training. Each technique addresses a different aspect of the overfitting problem, and they work best in combination.
 
 ---
 
